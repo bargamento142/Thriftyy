@@ -1,146 +1,151 @@
 package config;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 
 public class config {
-     public static Connection connectDB() {
+
+    // ✅ Connect to SQLite and initialize tables
+    public static Connection connectDB() {
         Connection con = null;
         try {
-            Class.forName("org.sqlite.JDBC"); // Load the SQLite JDBC driver
-            con = DriverManager.getConnection("jdbc:sqlite:.db"); // Establish connection
-            System.out.println("Connection Successful");
+            Class.forName("org.sqlite.JDBC"); // Load SQLite JDBC driver
+            con = DriverManager.getConnection("jdbc:sqlite:shirt.db"); // Connect to DB
+            System.out.println("✅ Connection Successful");
+
+            try (Statement stmt = con.createStatement()) {
+
+                // --- CUSTOMER TABLE ---
+                String sqlCustomer = "CREATE TABLE IF NOT EXISTS customer ("
+                        + "customer_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                        + "first_name TEXT NOT NULL,"
+                        + "last_name TEXT NOT NULL,"
+                        + "email TEXT,"
+                        + "contact TEXT,"
+                        + "address TEXT,"
+                        + "status TEXT DEFAULT 'Active'"
+                        + ");";
+                stmt.execute(sqlCustomer);
+
+                // --- TSHIRT TABLE ---
+                String sqlTShirt = "CREATE TABLE IF NOT EXISTS TShirt ("
+                        + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                        + "brand TEXT NOT NULL,"
+                        + "size TEXT NOT NULL,"
+                        + "color_design TEXT NOT NULL"
+                        + ");";
+                stmt.execute(sqlTShirt);
+
+                // --- ORDERS TABLE ---
+                String sqlOrders = "CREATE TABLE IF NOT EXISTS orders ("
+                        + "order_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                        + "customer_id INTEGER NOT NULL,"
+                        + "tshirt_id INTEGER NOT NULL,"
+                        + "quantity INTEGER NOT NULL,"
+                        + "total_price NUMERIC(10,2) NOT NULL,"
+                        + "order_date DATETIME DEFAULT CURRENT_TIMESTAMP,"
+                        + "status TEXT DEFAULT 'Pending',"
+                        + "FOREIGN KEY (customer_id) REFERENCES customer(customer_id),"
+                        + "FOREIGN KEY (tshirt_id) REFERENCES TShirt(id)"
+                        + ");";
+                stmt.execute(sqlOrders);
+
+                System.out.println("✅ Database initialized successfully!");
+
+            } catch (SQLException e) {
+                System.out.println("❌ Table creation error: " + e.getMessage());
+            }
+
         } catch (Exception e) {
-            System.out.println("Connection Failed: " + e);
+            System.out.println("❌ Connection Failed: " + e.getMessage());
         }
         return con;
     }
-public void addRecord(String sql, Object... values) {
-    try (Connection conn = this.connectDB(); // Use the connectDB method
-         PreparedStatement pstmt = conn.prepareStatement(sql)) {
-        
-        for (int i = 0; i < values.length; i++) {
-            if (values[i] instanceof Integer) {
-                pstmt.setInt(i + 1, (Integer) values[i]); // If the value is Integer
-            } else if (values[i] instanceof Double) {
-                pstmt.setDouble(i + 1, (Double) values[i]); // If the value is Double
-            } else if (values[i] instanceof Float) {
-                pstmt.setFloat(i + 1, (Float) values[i]); // If the value is Float
-            } else if (values[i] instanceof Long) {
-                pstmt.setLong(i + 1, (Long) values[i]); // If the value is Long
-            } else if (values[i] instanceof Boolean) {
-                pstmt.setBoolean(i + 1, (Boolean) values[i]); // If the value is Boolean
-            } else if (values[i] instanceof java.util.Date) {
-                pstmt.setDate(i + 1, new java.sql.Date(((java.util.Date) values[i]).getTime())); // If the value is Date
-            } else if (values[i] instanceof java.sql.Date) {
-                pstmt.setDate(i + 1, (java.sql.Date) values[i]); // If it's already a SQL Date
-            } else if (values[i] instanceof java.sql.Timestamp) {
-                pstmt.setTimestamp(i + 1, (java.sql.Timestamp) values[i]); // If the value is Timestamp
-            } else {
-                pstmt.setString(i + 1, values[i].toString()); // Default to String for other types
-            }
-        }
 
-        pstmt.executeUpdate();
-        System.out.println("Record added successfully!");
-    } catch (SQLException e) {
-        System.out.println("Error adding record: " + e.getMessage());
+    // ✅ Add Record
+    public void addRecord(String sql, Object... values) {
+        try (Connection conn = connectDB();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            for (int i = 0; i < values.length; i++) {
+                if (values[i] instanceof Integer) pstmt.setInt(i + 1, (Integer) values[i]);
+                else if (values[i] instanceof Double) pstmt.setDouble(i + 1, (Double) values[i]);
+                else pstmt.setString(i + 1, values[i].toString());
+            }
+
+            pstmt.executeUpdate();
+            System.out.println("✅ Record added successfully!");
+        } catch (SQLException e) {
+            System.out.println("❌ Error adding record: " + e.getMessage());
+        }
     }
-}
-    // Dynamic view method to display records from any table
+
+    // ✅ View Records
     public void viewRecords(String sqlQuery, String[] columnHeaders, String[] columnNames) {
-        // Check that columnHeaders and columnNames arrays are the same length
         if (columnHeaders.length != columnNames.length) {
-            System.out.println("Error: Mismatch between column headers and column names.");
+            System.out.println("❌ Error: Mismatch between column headers and names.");
             return;
         }
 
-        try (Connection conn = this.connectDB();
+        try (Connection conn = connectDB();
              PreparedStatement pstmt = conn.prepareStatement(sqlQuery);
              ResultSet rs = pstmt.executeQuery()) {
 
-            // Print the headers dynamically
             StringBuilder headerLine = new StringBuilder();
             headerLine.append("--------------------------------------------------------------------------------\n| ");
-            for (String header : columnHeaders) {
-                headerLine.append(String.format("%-20s | ", header)); // Adjust formatting as needed
-            }
+            for (String header : columnHeaders)
+                headerLine.append(String.format("%-20s | ", header));
             headerLine.append("\n--------------------------------------------------------------------------------");
+            System.out.println(headerLine);
 
-            System.out.println(headerLine.toString());
-
-            // Print the rows dynamically based on the provided column names
             while (rs.next()) {
                 StringBuilder row = new StringBuilder("| ");
-                for (String colName : columnNames) {
-                    String value = rs.getString(colName);
-                    row.append(String.format("%-20s | ", value != null ? value : "")); // Adjust formatting
+                for (String col : columnNames) {
+                    String value = rs.getString(col);
+                    row.append(String.format("%-20s | ", value != null ? value : ""));
                 }
-                System.out.println(row.toString());
+                System.out.println(row);
             }
             System.out.println("--------------------------------------------------------------------------------");
 
         } catch (SQLException e) {
-            System.out.println("Error retrieving records: " + e.getMessage());
+            System.out.println("❌ Error retrieving records: " + e.getMessage());
         }
     }
-      public void updateRecord(String sql, Object... values) {
-        try (Connection conn = this.connectDB(); // Use the connectDB method
+
+    // ✅ Update Record
+    public void updateRecord(String sql, Object... values) {
+        try (Connection conn = connectDB();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            // Loop through the values and set them in the prepared statement dynamically
             for (int i = 0; i < values.length; i++) {
-                if (values[i] instanceof Integer) {
-                    pstmt.setInt(i + 1, (Integer) values[i]); // If the value is Integer
-                } else if (values[i] instanceof Double) {
-                    pstmt.setDouble(i + 1, (Double) values[i]); // If the value is Double
-                } else if (values[i] instanceof Float) {
-                    pstmt.setFloat(i + 1, (Float) values[i]); // If the value is Float
-                } else if (values[i] instanceof Long) {
-                    pstmt.setLong(i + 1, (Long) values[i]); // If the value is Long
-                } else if (values[i] instanceof Boolean) {
-                    pstmt.setBoolean(i + 1, (Boolean) values[i]); // If the value is Boolean
-                } else if (values[i] instanceof java.util.Date) {
-                    pstmt.setDate(i + 1, new java.sql.Date(((java.util.Date) values[i]).getTime())); // If the value is Date
-                } else if (values[i] instanceof java.sql.Date) {
-                    pstmt.setDate(i + 1, (java.sql.Date) values[i]); // If it's already a SQL Date
-                } else if (values[i] instanceof java.sql.Timestamp) {
-                    pstmt.setTimestamp(i + 1, (java.sql.Timestamp) values[i]); // If the value is Timestamp
-                } else {
-                    pstmt.setString(i + 1, values[i].toString()); // Default to String for other types
-                }
+                if (values[i] instanceof Integer) pstmt.setInt(i + 1, (Integer) values[i]);
+                else if (values[i] instanceof Double) pstmt.setDouble(i + 1, (Double) values[i]);
+                else pstmt.setString(i + 1, values[i].toString());
             }
 
             pstmt.executeUpdate();
-            System.out.println("Record updated successfully!");
+            System.out.println("✅ Record updated successfully!");
         } catch (SQLException e) {
-            System.out.println("Error updating record: " + e.getMessage());
+            System.out.println("❌ Error updating record: " + e.getMessage());
         }
     }
+
+    // ✅ Delete Record
     public void deleteRecord(String sql, Object... values) {
-    try (Connection conn = this.connectDB();
-         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try (Connection conn = connectDB();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-        // Loop through the values and set them in the prepared statement dynamically
-        for (int i = 0; i < values.length; i++) {
-            if (values[i] instanceof Integer) {
-                pstmt.setInt(i + 1, (Integer) values[i]); // If the value is Integer
-            } else {
-                pstmt.setString(i + 1, values[i].toString()); // Default to String for other types
+            for (int i = 0; i < values.length; i++) {
+                if (values[i] instanceof Integer)
+                    pstmt.setInt(i + 1, (Integer) values[i]);
+                else
+                    pstmt.setString(i + 1, values[i].toString());
             }
+
+            pstmt.executeUpdate();
+            System.out.println("✅ Record deleted successfully!");
+        } catch (SQLException e) {
+            System.out.println("❌ Error deleting record: " + e.getMessage());
         }
-
-        pstmt.executeUpdate();
-        System.out.println("Record deleted successfully!");
-    } catch (SQLException e) {
-        System.out.println("Error deleting record: " + e.getMessage());
-    }
-}
-
-    public void deleteRecord(String sqlDelete, int deleteId) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
 }
